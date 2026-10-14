@@ -418,7 +418,7 @@ function bOfN(n){
 /*SPLINE-END*/
 
 var UP=[];
-for(var j=0;j<=150;j++) UP.push(nOfB(j/2));
+for(var j=0;j<=300;j++) UP.push(nOfB(j/4));
 
 var fmt=function(v,d){return v.toFixed(d).replace('.',',');};
 
@@ -517,19 +517,21 @@ function drawScale(nSet){
 
   g.font='500 34px '+FONT; g.textAlign='center'; g.textBaseline='middle';
 
-  var kMin=Math.ceil((nSet-(SCX+8)/PX)*1000), kMax=Math.floor((nSet+(SW-SCX+8)/PX)*1000);
+  var kMin=Math.ceil((nSet-(SCX+8)/PX)*2000), kMax=Math.floor((nSet+(SW-SCX+8)/PX)*2000);
   for(var k=kMin;k<=kMax;k++){
-    var x=SCX+(k/1000-nSet)*PX;
-    var major=(k%10===0), mid=(k%5===0);
-    line(x,141,x,141+(major?34:(mid?26:18)),major?1.6:1.1);
-    if(major && x>-40 && x<SW+40) g.fillText((k/1000).toFixed(3),x,220);
+    var x=SCX+(k/2000-nSet)*PX;
+    var longL=(k%10===0), medL=(k%2===0);
+    var lenL=longL?36:(medL?26:18);
+    line(x,141,x,141+lenL,longL?1.6:1.1);
+    if(k%20===0 && x>-40 && x<SW+40) g.fillText((k/2000).toFixed(3),x,220);
   }
   for(var q=0;q<UP.length;q++){
     var xu=SCX+(UP[q]-nSet)*PX;
     if(xu<-10||xu>SW+10) continue;
-    var majU=(q%10===0), midU=(q%5===0);
-    line(xu,137,xu,137-(majU?34:(midU?26:18)),majU?1.6:1.1);
-    if(majU && xu>-40 && xu<SW+40) g.fillText(String(q/2),xu,65);
+    var longU=(q%20===0), medU=(q%4===0);
+    var lenU=longU?36:(medU?27:19);
+    line(xu,137,xu,137-lenU,longU?1.6:1.1);
+    if(longU && xu>-40 && xu<SW+40) g.fillText(String(q/4),xu,65);
   }
 
   g.font='500 22px '+FONT;
