@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interaktywna symulacja okularu refraktometru Abbego AR4 z suwakami dyspersji i położenia granicy oraz bieżącym odczytem nD.">
+<style>
+:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html,body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+</style>
+<title>Odczyt refraktometru AR4</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: czarny panel okularu po lewej, sterowanie, odczyt i procedura po prawej; na telefonie jedna kolumna */
+:root{
+  --bg:#E8EDE6;
+  --surface:#F6F8F3;
+  --ink:#16201A;
+  --muted:#556158;
+  --line:#C6D0C4;
+  --accent:#2C6A0E;
+  --accent-ink:#FFFFFF;
+  --ok-bg:#DAEACB;
+  --display-bg:#0C180A;
+  --display-ink:#B4F03A;
+  --display-label:#8AA384;
+  --font-display:"Barlow Semi Condensed","Arial Narrow",sans-serif;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1410;
+    --surface:#161F19;
+    --ink:#E2EBDD;
+    --muted:#95A391;
+    --line:#2A372D;
+    --accent:#9BDC2B;
+    --accent-ink:#0E1410;
+    --ok-bg:#223619;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1410;
+  --surface:#161F19;
+  --ink:#E2EBDD;
+  --muted:#95A391;
+  --line:#2A372D;
+  --accent:#9BDC2B;
+  --accent-ink:#0E1410;
+  --ok-bg:#223619;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font:16px/1.55 var(--font-body);
+  padding-inline:16px;
+  padding-block:28px 40px;
+}
+.wrap{max-width:1040px;margin-inline:auto;display:grid;gap:28px}
+h1{
+  margin:0;
+  font:600 clamp(28px,5vw,42px)/1.1 var(--font-display);
+  letter-spacing:-0.01em;
+  text-wrap:balance;
+}
+.lead{margin:10px 0 0;max-width:62ch;color:var(--muted)}
+h2{
+  margin:0;
+  font:500 13px/1 var(--font-display);
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--muted);
+}
+.grid{
+  display:grid;
+  grid-template-columns:minmax(0,460px) minmax(0,1fr);
+  gap:32px;
+  align-items:start;
+}
+.stage{display:grid;gap:16px;min-width:0}
+.hint{display:none}
+
+.eyepiece{
+  background:#050505;
+  border-radius:16px;
+  padding:18px 16px 20px;
+  display:grid;
+  gap:16px;
+  justify-items:center;
+}
+.eyepiece figure{margin:0;width:100%;display:grid;gap:8px;justify-items:center}
+.eyepiece figcaption{
+  font:500 12px/1 var(--font-display);
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:#7F8981;
+}
+canvas{display:block;height:auto;max-width:100%}
+#field{width:min(66%,300px)}
+#scale{width:100%}
+
+.col{display:grid;gap:24px;min-width:0}
+.block{display:grid;gap:12px;min-width:0}
+.card{
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:20px;
+  display:grid;
+  gap:20px;
+}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+label,.lab{font-weight:500}
+output{font:500 15px var(--font-display);font-variant-numeric:tabular-nums;color:var(--muted)}
+.nudges{
+  display:grid;
+  grid-template-columns:44px minmax(0,1fr) 44px;
+  align-items:center;
+  gap:8px;
+  font-size:13px;
+  color:var(--muted);
+  text-align:center;
+}
+.nudge{
+  width:44px;height:40px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:transparent;
+  color:var(--ink);
+  font:500 22px/1 var(--font-display);
+  cursor:pointer;
+  touch-action:manipulation;
+  user-select:none;
+  -webkit-user-select:none;
+  -webkit-touch-callout:none;
+}
+.nudge:hover{background:var(--bg)}
+.nudge:active{background:var(--ok-bg)}
+.nudge:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+select{
+  width:100%;
+  background:var(--bg);
+  color:var(--ink);
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:9px 10px;
+  font:inherit;
+}
+select:focus-visible,.btn:focus-visible,.readout input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:30px;background:transparent;margin:2px 0}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:var(--line)}
+input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:var(--line)}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;
+  width:18px;height:30px;margin-top:-13px;
+  border-radius:3px;
+  background:var(--accent);
+  border:4px solid var(--surface);
+  box-shadow:0 0 0 1px var(--accent);
+}
+input[type=range]::-moz-range-thumb{
+  width:10px;height:22px;
+  border-radius:3px;
+  background:var(--accent);
+  border:4px solid var(--surface);
+  box-shadow:0 0 0 1px var(--accent);
+}
+input[type=range]:focus-visible::-webkit-slider-thumb{outline:2px solid var(--ink);outline-offset:2px}
+input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--ink);outline-offset:2px}
+
+.btn{
+  justify-self:start;
+  background:transparent;
+  color:var(--ink);
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:8px 14px;
+  font:500 14px var(--font-body);
+  cursor:pointer;
+}
+.btn:hover{background:var(--bg)}
+
+.readout{
+  background:var(--display-bg);
+  border-radius:12px;
+  padding:18px 20px;
+  display:grid;
+  grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);
+  gap:8px 20px;
+}
+.readout .f{display:grid;gap:4px;min-width:0}
+.readout label{font:500 12px/1.2 var(--font-display);letter-spacing:.12em;text-transform:uppercase;color:var(--display-label)}
+.readout input{
+  width:100%;min-width:0;
+  background:transparent;border:0;padding:0;
+  color:var(--display-ink);
+  font:500 54px/1.05 var(--font-display);
+  font-variant-numeric:tabular-nums;
+}
+.readout .f.small input{font-size:34px;padding-top:12px}
+.ref{margin:0;font-size:13px;color:var(--muted)}
+.sample + .ref{margin-top:-10px}
+
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.step{
+  display:grid;
+  grid-template-columns:30px minmax(0,1fr);
+  gap:12px;
+  padding:12px 14px;
+  border:1px solid transparent;
+  border-radius:10px;
+  color:var(--muted);
+}
+.step .mark{
+  width:30px;height:30px;border-radius:50%;
+  border:1.5px solid var(--line);
+  display:grid;place-items:center;
+  font:600 15px var(--font-display);
+}
+.step .mark svg{display:none}
+.step h3{margin:0;font:600 18px/1.3 var(--font-display);color:inherit}
+.step .sub{font-size:13px}
+.step.done .mark{background:var(--ok-bg);border-color:var(--accent);color:var(--accent)}
+.step.done .mark .n{display:none}
+.step.done .mark svg{display:block}
+.step.active{background:var(--surface);border-color:var(--line);color:var(--ink)}
+.step.active .mark{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.detail{margin:8px 0 0;font-size:15px;color:var(--ink)}
+.detail:empty{display:none}
+.note{margin:0;font-size:13px;color:var(--muted);max-width:70ch}
+
+button,select,input[type=range]{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+input[type=range]{touch-action:pan-y}
+@media (pointer:coarse){
+  input[type=range]{height:44px}
+  input[type=range]::-webkit-slider-thumb{width:22px;height:38px;margin-top:-17px}
+  input[type=range]::-moz-range-thumb{width:14px;height:30px}
+  .btn{padding:12px 18px}
+  select{padding:12px 10px}
+}
+
+@media (max-width:840px){
+  body{padding-block:16px 32px}
+  .wrap{gap:16px}
+  .lead{font-size:15px;margin-top:6px}
+  .grid{grid-template-columns:minmax(0,1fr);gap:16px}
+  .stage{
+    position:sticky;
+    top:env(safe-area-inset-top,0px);
+    z-index:5;
+    background:var(--bg);
+    margin-inline:-16px;
+    padding:8px 16px 10px;
+    border-bottom:1px solid var(--line);
+    gap:8px;
+  }
+  .stage > *{width:100%;max-width:560px;margin-inline:auto}
+  .eyepiece{
+    grid-template-columns:minmax(0,1fr);
+    padding:10px 12px 12px;
+    gap:8px;
+    border-radius:12px;
+  }
+  .eyepiece figure{gap:0}
+  .eyepiece figcaption{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  #field{width:min(62%,265px)}
+  #scale{width:min(82%,380px)}
+  .stage > .sample label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .stage > .sample select{padding:9px 10px}
+  .readout{
+    padding:8px 14px 10px;
+    gap:0 8px;
+    grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);
+    align-items:end;
+  }
+  .readout label{font-size:11px;white-space:nowrap}
+  .readout input{font-size:38px}
+  .readout .f:first-child{grid-column:2;text-align:center}
+  .readout .f:first-child input{width:3.7em;text-align:center}
+  .readout .f.small{grid-column:3;justify-self:end;text-align:right}
+  .readout .f.small input{font-size:20px;padding-top:0;width:3.4em;text-align:right}
+  .hint{display:block;margin:0;font-size:14px;line-height:1.45;min-height:2.9em;color:var(--ink)}
+  .card{padding:16px;gap:16px}
+  .step{padding:10px 12px}
+}
+@media (max-width:840px) and (max-height:700px){
+  .hint{display:none}
+  #field{width:min(53%,218px)}
+  #scale{width:min(74%,330px)}
+}
+@media (max-width:840px) and (max-height:540px){
+  .stage{position:static}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Odczyt refraktometru Abbego AR4</h1>
+    <p class="lead">Poruszaj suwakami i obserwuj okular. Gdy granica jest ostra i leży na krzyżu nitek, odczytaj wartość przy pionowej kresce na skali.</p>
+  </header>
+
+  <main class="grid">
+    <div class="stage">
+    <section class="eyepiece" aria-label="Widok w okularze">
+      <figure>
+        <figcaption>Pole widzenia</figcaption>
+        <canvas id="field" width="400" height="400" role="img" aria-label="Pole widzenia okularu z granicą światła i cienia oraz krzyżem nitek"></canvas>
+      </figure>
+      <figure>
+        <figcaption>Skala</figcaption>
+        <canvas id="scale" width="434" height="287" role="img" aria-label="Skala nD i skala procentowa z pionową kreską odczytu"></canvas>
+      </figure>
+    </section>
+    <section class="readout" aria-label="Odczyt">
+      <div class="f">
+        <label for="nd">Współczynnik załamania nD</label>
+        <input id="nd" type="text" readonly value="—">
+      </div>
+      <div class="f small">
+        <label for="brix">Cukier, %</label>
+        <input id="brix" type="text" readonly value="—">
+      </div>
+    </section>
+    <p class="hint" id="hint" aria-hidden="true"></p>
+    </div>
+
+    <div class="col">
+      <section class="block" aria-labelledby="h-ster">
+        <h2 id="h-ster">Sterowanie</h2>
+        <div class="card">
+          <div class="sample" id="sampleWrap">
+            <label for="sample">Próbka</label>
+            <select id="sample"></select>
+          </div>
+          <p class="ref" id="ref"></p>
+          <div>
+            <div class="row"><label for="comp">Kompensator dyspersji</label><output id="compVal" for="comp">0</output></div>
+            <input type="range" id="comp" min="0" max="100" step="1" value="14">
+            <div class="nudges"><button class="nudge" type="button" data-for="comp" data-dir="-1" aria-label="Kompensator: mniej">−</button><span>mniej · więcej</span><button class="nudge" type="button" data-for="comp" data-dir="1" aria-label="Kompensator: więcej">+</button></div>
+          </div>
+          <div>
+            <div class="row"><label for="main">Pokrętło główne (położenie granicy)</label><output id="mainVal" for="main">0</output></div>
+            <input type="range" id="main" min="1" max="2" step="0.00005" value="1.5">
+            <div class="nudges"><button class="nudge" type="button" data-for="main" data-dir="-1" aria-label="Pokrętło główne: niższe nD o 0,0001">−</button><span>niższe nD · wyższe nD</span><button class="nudge" type="button" data-for="main" data-dir="1" aria-label="Pokrętło główne: wyższe nD o 0,0001">+</button></div>
+          </div>
+          <button class="btn" id="reset" type="button">Ustaw od nowa</button>
+        </div>
+      </section>
+
+      <section class="block" aria-labelledby="h-proc">
+        <h2 id="h-proc">Procedura</h2>
+        <ol class="steps" id="steps" aria-live="polite">
+          <li class="step">
+            <span class="mark"><span class="n">1</span><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <div><h3>Usuń zabarwienie granicy</h3><div class="sub">kompensator dyspersji</div><p class="detail"></p></div>
+          </li>
+          <li class="step">
+            <span class="mark"><span class="n">2</span><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <div><h3>Ustaw granicę na krzyżu</h3><div class="sub">pokrętło główne</div><p class="detail"></p></div>
+          </li>
+          <li class="step">
+            <span class="mark"><span class="n">3</span><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <div><h3>Odczytaj wartość przy kresce</h3><div class="sub">skala nD i skala %</div><p class="detail"></p></div>
+          </li>
+        </ol>
+      </section>
+    </div>
+  </main>
+
+  <p class="note">Symulacja poglądowa. Przeliczenie % na nD opiera się na tablicy sacharozy w 20 °C. Układ okularu i skali odtworzono ze zdjęcia AR4. W przyrządzie skala obejmuje cały zakres pomiarowy, a tu suwak pokrętła głównego obejmuje tylko okolice wybranej próbki.</p>
+</div>
+
+<script>
+(function(){
+'use strict';
+var $=function(s){return document.querySelector(s);};
+
+var SAMPLES=[
+  {name:'Woda destylowana',n:1.3330,c0:0.52},
+  {name:'Etanol bezwodny',n:1.3614,c0:0.60},
+  {name:'Roztwór sacharozy 20 %',n:1.3639,c0:0.47},
+  {name:'Roztwór sacharozy 40 %',n:1.3997,c0:0.38},
+  {name:'Roztwór sacharozy 60 %',n:1.4419,c0:0.31}
+];
+
+/*SPLINE-START*/
+var TABLE=[[0,1.3330],[5,1.3403],[10,1.3479],[15,1.3557],[20,1.3639],[25,1.3723],[30,1.3812],[35,1.3903],[40,1.3997],[45,1.4096],[50,1.4200],[55,1.4308],[60,1.4419],[65,1.4537],[70,1.4658],[75,1.4783]];
+var bx=TABLE.map(function(r){return r[0];});
+var by=TABLE.map(function(r){return r[1];});
+var mm=by.map(function(_,i){
+  var a=Math.max(0,i-1), b=Math.min(by.length-1,i+1);
+  return (by[b]-by[a])/(bx[b]-bx[a]);
+});
+function nOfB(b){
+  b=Math.min(75,Math.max(0,b));
+  var i=Math.min(bx.length-2,Math.floor(b/5));
+  var h=5, t=(b-bx[i])/h, t2=t*t, t3=t2*t;
+  return (2*t3-3*t2+1)*by[i]+(t3-2*t2+t)*h*mm[i]+(-2*t3+3*t2)*by[i+1]+(t3-t2)*h*mm[i+1];
+}
+function bOfN(n){
+  if(n<by[0]-1e-9||n>by[by.length-1]+1e-9) return null;
+  var lo=0, hi=75;
+  for(var k=0;k<40;k++){
+    var mid=(lo+hi)/2;
+    if(nOfB(mid)<n) lo=mid; else hi=mid;
+  }
+  return (lo+hi)/2;
+}
+/*SPLINE-END*/
+
+var UP=[];
+for(var j=0;j<=150;j++) UP.push(nOfB(j/2));
+
+var fmt=function(v,d){return v.toFixed(d).replace('.',',');};
+
+var field=$('#field'), scale=$('#scale');
+var comp=$('#comp'), main=$('#main'), sel=$('#sample');
+var fctx=null, sctx=null;
+
+var FW=400, R=172, CX=200, CY=200, K=12500;
+var SW=434, SH=287, SCX=217, PX=14350;
+var POLY=[[0,25],[27,0],[407,0],[434,25],[434,250],[405,287],[29,287],[0,260]];
+var FONT='"Barlow Semi Condensed","Arial Narrow",sans-serif';
+
+var S=SAMPLES[3], idx=3;
+
+function fit(c,lw,lh){
+  var dpr=Math.min(window.devicePixelRatio||1,3);
+  var w=c.clientWidth||lw;
+  c.width=Math.round(w*dpr);
+  c.height=Math.round(w*dpr*lh/lw);
+  var g=c.getContext('2d');
+  g.setTransform(c.width/lw,0,0,c.height/lh,0,0);
+  return g;
+}
+
+function compute(){
+  var c=+comp.value/100, nSet=+main.value;
+  var r=c-S.c0;
+  var y=CY+(S.n-nSet)*K;
+  return {
+    c:c, nSet:nSet, r:r, y:y,
+    visible:(y>CY-R+6 && y<CY+R-6),
+    sharp:Math.abs(r)<0.04,
+    centered:Math.abs(y-CY)<=2.5
+  };
+}
+
+function drawField(st){
+  var g=fctx; g.clearRect(0,0,FW,FW);
+  var y=st.y, yc=Math.min(FW,Math.max(0,y));
+  g.save();
+  g.beginPath(); g.arc(CX,CY,R,0,Math.PI*2); g.clip();
+
+  var top=CY-R;
+  var lg=g.createLinearGradient(0,top,0,Math.max(y,top+1));
+  lg.addColorStop(0,'#F1F3E6'); lg.addColorStop(0.55,'#EEEEDC'); lg.addColorStop(1,'#E6D8A6');
+  g.fillStyle=lg; g.fillRect(0,0,FW,yc);
+  g.fillStyle='#38373A'; g.fillRect(0,yc,FW,FW-yc);
+
+  var W=2+Math.abs(st.r)*90;
+  var gr=g.createLinearGradient(0,y-W/2,0,y+W/2);
+  if(st.r>0){
+    gr.addColorStop(0,'rgba(240,232,190,0)'); gr.addColorStop(0.28,'#F2E27E');
+    gr.addColorStop(0.5,'#E8892F'); gr.addColorStop(0.75,'#B0382D'); gr.addColorStop(1,'#38373A');
+  } else {
+    gr.addColorStop(0,'rgba(220,235,230,0)'); gr.addColorStop(0.28,'#A6D6D0');
+    gr.addColorStop(0.5,'#3B8FD0'); gr.addColorStop(0.75,'#2B3F9C'); gr.addColorStop(1,'#38373A');
+  }
+  g.fillStyle=gr; g.fillRect(0,y-W/2,FW,W);
+
+  var vg=g.createRadialGradient(CX,CY,R*0.55,CX,CY,R);
+  vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,0.22)');
+  g.fillStyle=vg; g.fillRect(0,0,FW,FW);
+
+  var d=R*0.7071;
+  function cross(y0,y1,col){
+    g.save();
+    g.beginPath(); g.rect(0,y0,FW,y1-y0); g.clip();
+    g.strokeStyle=col; g.lineWidth=1.2;
+    g.beginPath();
+    g.moveTo(CX-d,CY-d); g.lineTo(CX+d,CY+d);
+    g.moveTo(CX+d,CY-d); g.lineTo(CX-d,CY+d);
+    g.stroke();
+    g.restore();
+  }
+  cross(0,yc,'rgba(50,46,36,0.85)');
+  cross(yc,FW,'rgba(135,135,141,0.85)');
+  g.restore();
+}
+
+function drawScale(nSet){
+  var g=sctx; g.clearRect(0,0,SW,SH);
+  g.save();
+  g.beginPath();
+  POLY.forEach(function(p,i){ if(i) g.lineTo(p[0],p[1]); else g.moveTo(p[0],p[1]); });
+  g.closePath(); g.clip();
+
+  var bg=g.createRadialGradient(SCX,140,10,SCX,140,300);
+  bg.addColorStop(0,'#B2F03A'); bg.addColorStop(0.6,'#8EDA1C'); bg.addColorStop(1,'#68C00E');
+  g.fillStyle=bg; g.fillRect(0,0,SW,SH);
+
+  var ink='#14300A';
+  g.strokeStyle=ink; g.fillStyle=ink; g.lineCap='butt';
+  function line(x0,y0,x1,y1,w){ g.lineWidth=w||1.1; g.beginPath(); g.moveTo(x0,y0); g.lineTo(x1,y1); g.stroke(); }
+
+  line(0,137,SW,137,1.1); line(0,141,SW,141,1.1);
+
+  g.font='500 34px '+FONT; g.textAlign='center'; g.textBaseline='middle';
+
+  var kMin=Math.ceil((nSet-(SCX+8)/PX)*1000), kMax=Math.floor((nSet+(SW-SCX+8)/PX)*1000);
+  for(var k=kMin;k<=kMax;k++){
+    var x=SCX+(k/1000-nSet)*PX;
+    var major=(k%10===0), mid=(k%5===0);
+    line(x,141,x,141+(major?34:(mid?26:18)),major?1.6:1.1);
+    if(major && x>-40 && x<SW+40) g.fillText((k/1000).toFixed(3),x,220);
+  }
+  for(var q=0;q<UP.length;q++){
+    var xu=SCX+(UP[q]-nSet)*PX;
+    if(xu<-10||xu>SW+10) continue;
+    var majU=(q%10===0), midU=(q%5===0);
+    line(xu,137,xu,137-(majU?34:(midU?26:18)),majU?1.6:1.1);
+    if(majU && xu>-40 && xu<SW+40) g.fillText(String(q/2),xu,65);
+  }
+
+  g.font='500 22px '+FONT;
+  g.fillText('%',SCX,22);
+  var wn=g.measureText('n').width;
+  g.font='500 14px '+FONT;
+  var wD=g.measureText('D').width;
+  var x0=SCX-(wn+wD)/2;
+  g.textAlign='left';
+  g.font='500 22px '+FONT; g.fillText('n',x0,264);
+  g.font='500 14px '+FONT; g.fillText('D',x0+wn,270);
+
+  line(SCX,36,SCX,208,1.2);
+  g.restore();
+}
+
+function update(){
+  if(!fctx||!sctx) return;
+  var st=compute();
+  drawField(st);
+  drawScale(st.nSet);
+
+  var b=bOfN(st.nSet);
+  $('#nd').value=fmt(st.nSet,4);
+  $('#brix').value=(b==null)?'—':fmt(b,1);
+  $('#compVal').textContent=String(Math.round(+comp.value));
+  $('#mainVal').textContent=fmt(st.nSet,4);
+  $('#ref').textContent='Wartość tablicowa próbki w 20 °C: '+fmt(S.n,4);
+  scale.setAttribute('aria-label','Skala: nD '+fmt(st.nSet,4)+(b==null?'':', '+fmt(b,1)+' %')+' przy pionowej kresce');
+
+  var done=[st.visible&&st.sharp, st.centered, st.visible&&st.sharp&&st.centered];
+  var active=!st.visible?2:(!st.sharp?1:(!st.centered?2:3));
+  var msg;
+  if(active===1){
+    msg='Granica jest zabarwiona. Przesuń suwak kompensatora '+(st.r>0?'w lewo':'w prawo')+', aż obwódka zniknie.';
+  } else if(active===2){
+    msg=!st.visible
+      ? 'Granica jest poza polem widzenia. Przesuń suwak pokrętła głównego '+(st.y<CY?'w lewo':'w prawo')+', aż pojawi się w okularze.'
+      : 'Granica leży '+(st.y<CY?'powyżej':'poniżej')+' krzyża. Przesuń suwak pokrętła głównego '+(st.y<CY?'w lewo':'w prawo')+'.';
+  } else {
+    msg='Granica jest ostra i leży na krzyżu. Odczyt przy pionowej kresce: nD = '+fmt(st.nSet,4)+(b==null?'':', '+fmt(b,1)+' %')+'.';
+  }
+  var sh;
+  if(active===1) sh='Granica zabarwiona. Kompensator: suwak '+(st.r>0?'w lewo':'w prawo')+'.';
+  else if(active===2) sh=!st.visible
+    ? 'Granicy nie widać. Pokrętło główne: suwak '+(st.y<CY?'w lewo':'w prawo')+'.'
+    : 'Granica '+(st.y<CY?'nad':'pod')+' krzyżem. Pokrętło główne: suwak '+(st.y<CY?'w lewo':'w prawo')+'.';
+  else sh='Gotowe. Odczyt: nD = '+fmt(st.nSet,4)+(b==null?'':' · '+fmt(b,1)+' %')+'.';
+  $('#hint').textContent=sh;
+  var items=document.querySelectorAll('#steps .step');
+  for(var i=0;i<items.length;i++){
+    var li=items[i];
+    li.classList.toggle('done',!!done[i]);
+    li.classList.toggle('active',active===i+1);
+    if(active===i+1) li.setAttribute('aria-current','step'); else li.removeAttribute('aria-current');
+    li.querySelector('.detail').textContent=(active===i+1)?msg:'';
+  }
+}
+
+var pend=false;
+function sched(){
+  if(pend) return;
+  pend=true;
+  requestAnimationFrame(function(){ pend=false; update(); });
+}
+
+function load(i){
+  idx=i; S=SAMPLES[i];
+  sel.value=String(i);
+  main.min=(S.n-0.02).toFixed(5);
+  main.max=(S.n+0.02).toFixed(5);
+  main.step='0.00005';
+  var off=(i%2)?-0.0078:0.0078;
+  main.value=(S.n+off).toFixed(5);
+  comp.value=(i%2)?78:14;
+  update();
+}
+
+SAMPLES.forEach(function(s,i){
+  var o=document.createElement('option');
+  o.value=String(i);
+  o.textContent=s.name+' (nD '+fmt(s.n,4)+')';
+  sel.appendChild(o);
+});
+sel.addEventListener('change',function(){ load(+sel.value); });
+comp.addEventListener('input',sched);
+main.addEventListener('input',sched);
+$('#reset').addEventListener('click',function(){ load(idx); });
+
+function nudge(id,dir){
+  var el=$('#'+id), isMain=(id==='main');
+  var v=+el.value+dir*(isMain?0.0001:1);
+  v=Math.min(+el.max,Math.max(+el.min,v));
+  el.value=isMain?v.toFixed(5):String(v);
+  sched();
+}
+Array.prototype.forEach.call(document.querySelectorAll('.nudge'),function(btn){
+  var id=btn.getAttribute('data-for'), dir=+btn.getAttribute('data-dir');
+  var t1=null, t2=null;
+  function stop(){ clearTimeout(t1); clearInterval(t2); t1=null; t2=null; }
+  btn.addEventListener('pointerdown',function(e){
+    e.preventDefault();
+    stop();
+    nudge(id,dir);
+    t1=setTimeout(function(){ t2=setInterval(function(){ nudge(id,dir); },70); },380);
+  });
+  ['pointerup','pointerleave','pointercancel','blur'].forEach(function(ev){ btn.addEventListener(ev,stop); });
+  btn.addEventListener('click',function(e){ if(e.detail===0) nudge(id,dir); });
+  btn.addEventListener('contextmenu',function(e){ e.preventDefault(); });
+});
+
+function refit(){
+  fctx=fit(field,FW,FW);
+  sctx=fit(scale,SW,SH);
+  update();
+}
+if(window.ResizeObserver){
+  new ResizeObserver(refit).observe($('.eyepiece'));
+}
+window.addEventListener('resize',refit);
+
+var mq=window.matchMedia('(max-width:840px)');
+function placeSample(){
+  var w=$('#sampleWrap'), stage=$('.stage'), card=$('.card');
+  if(mq.matches){
+    if(w.parentNode!==stage) stage.insertBefore(w,stage.firstChild);
+  } else if(w.parentNode!==card){
+    card.insertBefore(w,card.firstChild);
+  }
+}
+if(mq.addEventListener) mq.addEventListener('change',placeSample); else mq.addListener(placeSample);
+placeSample();
+
+load(3);
+refit();
+if(document.fonts){
+  document.fonts.load('500 34px "Barlow Semi Condensed"').then(update,function(){});
+  document.fonts.ready.then(update);
+}
+})();
+</script>
+</body>
+</html>
